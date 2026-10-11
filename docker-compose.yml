@@ -1,0 +1,40 @@
+services:
+  db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: appuser
+      POSTGRES_PASSWORD: apppass
+      POSTGRES_DB: orders
+    volumes:
+      - ./db/init.sql:/docker-entrypoint-initdb.d/init.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U appuser -d orders"]
+      interval: 3s
+      timeout: 3s
+      retries: 20
+
+  internal:
+    image: hashicorp/http-echo:latest
+    command: ["-text", "INTERNAL-SECRET: db_root_password=super-secret-internal-token-9f3a"]
+    expose:
+      - "5678"
+
+  backend:
+    build: ./backend
+    environment:
+      DATABASE_URL: postgres://appuser:apppass@db:5432/orders
+      PORT: "3000"
+    ports:
+      - "3000:3000"
+    depends_on:
+      db:
+        condition: service_healthy
+
+  frontend:
+    build: ./frontend
+    environment:
+      VITE_API_BASE: http://localhost:3000
+    ports:
+      - "5173:5173"
+    depends_on:
+      - backend
